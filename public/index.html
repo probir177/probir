@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="bn">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FTP এআই অ্যাসিস্ট্যান্ট</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <section id="login" class="hidden">
+    <form id="loginForm" class="card">
+      <h1>FTP এআই অ্যাসিস্ট্যান্ট</h1>
+      <input type="password" id="password" placeholder="অ্যাডমিন পাসওয়ার্ড" autocomplete="current-password" required />
+      <button type="submit">লগইন</button>
+      <p id="loginErr" class="err"></p>
+    </form>
+  </section>
+
+  <section id="app" class="hidden">
+    <header>
+      <strong>FTP এআই অ্যাসিস্ট্যান্ট</strong>
+      <span id="proto" class="badge"></span>
+      <label class="toggle" title="চালু থাকলে লেখা/মোছা/নাম বদলানোর আগে অনুমতি চাইবে না">
+        <input type="checkbox" id="auto" /> সম্পূর্ণ অটোমেশন
+      </label>
+      <button id="reset" class="ghost">নতুন কথোপকথন</button>
+      <button id="logout" class="ghost">লগআউট</button>
+    </header>
+    <main>
+      <aside id="files">
+        <div class="bar">
+          <button id="up" class="ghost" title="উপরের ফোল্ডার">⬆</button>
+          <code id="cwd">/</code>
+          <button id="refresh" class="ghost" title="রিফ্রেশ">⟳</button>
+        </div>
+        <ul id="fileList"></ul>
+        <label class="upload">ফাইল আপলোড<input type="file" id="uploadInput" multiple /></label>
+      </aside>
+      <div id="chat">
+        <div id="messages"></div>
+        <div id="approval" class="hidden"></div>
+        <form id="chatForm">
+          <textarea id="input" rows="2" placeholder="যেমন: /reports ফোল্ডারের সব CSV পড়ে এই মাসের মোট আয় হিসাব করো"></textarea>
+          <button type="submit" id="send">পাঠান</button>
+        </form>
+      </div>
+    </main>
+  </section>
+  <script src="app.js"></script>
+</body>
+</html>
