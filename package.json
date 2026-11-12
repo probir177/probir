@@ -30,9 +30,11 @@
     "express-rate-limit": "^8.7.4",
     "express-session": "^1.19.0",
     "helmet": "^8.3.0",
+    "mammoth": "^1.13.0",
     "multer": "^2.5.0",
     "sharp": "^0.35.5",
     "ssh2-sftp-client": "^12.1.1",
+    "word-extractor": "^1.0.4",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   }
 }
