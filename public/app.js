@@ -46,7 +46,9 @@ function addMsg(text, cls, actions) {
     for (const act of actions) {
       const line = document.createElement("div");
       line.className = act.ok ? "" : "bad";
-      line.textContent = `${act.ok ? "✓" : "✗"} ${act.tool} ${act.input.path || act.input.from || ""}${act.error ? " — " + act.error : ""}`;
+      const i = act.input;
+      const target = i.package_name ? `${i.package_name}${i.path ? "/" + i.path : ""}` : i.path || i.from || i.query || i.kind || "";
+      line.textContent = `${act.ok ? "✓" : "✗"} ${act.tool} ${target}${act.error ? " — " + act.error : ""}`;
       a.appendChild(line);
     }
     div.appendChild(a);
@@ -76,7 +78,9 @@ $("chatForm").onsubmit = async (e) => {
 };
 $("input").onkeydown = (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("chatForm").requestSubmit(); } };
 
-const LABEL = { write_file: "ফাইল লেখা", rename_path: "নাম বদল/সরানো", delete_path: "মুছে ফেলা" };
+const LABEL = { write_file: "ফাইল লেখা", rename_path: "নাম বদল/সরানো", delete_path: "মুছে ফেলা", fdroid_download_apk: "F-Droid থেকে APK এনে FTP-তে রাখা" };
+const describe = (i) =>
+  i.package_name ? `${i.package_name} (${i.version_code ? "ভার্সন " + i.version_code : "সর্বশেষ"}) → ${i.dest_dir}` : i.path || `${i.from} → ${i.to}`;
 function renderApproval(pending) {
   const box = $("approval");
   box.innerHTML = "<strong>এই কাজগুলোর জন্য আপনার অনুমতি দরকার:</strong>";
@@ -87,7 +91,7 @@ function renderApproval(pending) {
     cb.type = "checkbox"; cb.checked = true; cb.dataset.id = p.id;
     const info = document.createElement("div");
     const title = document.createElement("div");
-    title.textContent = `${LABEL[p.name] || p.name}: ${p.input.path || `${p.input.from} → ${p.input.to}`}`;
+    title.textContent = `${LABEL[p.name] || p.name}: ${describe(p.input)}`;
     info.appendChild(title);
     if (p.input.content) {
       const pre = document.createElement("pre");

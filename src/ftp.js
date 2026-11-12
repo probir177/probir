@@ -67,6 +67,9 @@ async function openFtp(secure) {
     async put(file, buf) {
       await client.uploadFrom(Readable.from(buf), file);
     },
+    async putFile(remote, localPath) {
+      await client.uploadFrom(localPath, remote);
+    },
     async mkdir(dir) {
       await client.ensureDir(dir);
     },
@@ -116,6 +119,9 @@ async function openSftp() {
     },
     async put(file, buf) {
       await sftp.put(buf, file);
+    },
+    async putFile(remote, localPath) {
+      await sftp.fastPut(localPath, remote);
     },
     async mkdir(dir) {
       await sftp.mkdir(dir, true);

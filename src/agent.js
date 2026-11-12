@@ -3,6 +3,8 @@ import Anthropic from "@anthropic-ai/sdk";
 import path from "node:path/posix";
 import { withConn, safePath, currentProtocol } from "./ftp.js";
 import { fileKind, MAX_BYTES, toToolContent } from "./readers.js";
+import * as fdroid from "./fdroid.js";
+import fs from "node:fs/promises";
 
 const client = new Anthropic();
 const MODEL = process.env.CLAUDE_MODEL || "claude-opus-5-5";
@@ -16,6 +18,10 @@ const SYSTEM = `আপনি একজন দক্ষ এআই অ্যাস
 - Word ফাইল (চুক্তিপত্র, চিঠি, রিপোর্ট) পড়ে সারাংশ, গুরুত্বপূর্ণ তথ্য (তারিখ, টাকার অঙ্ক, শর্ত) বের করে দিন।
 - CSV/Excel/লগ/রিপোর্ট ফাইল বিশ্লেষণ করে সংক্ষিপ্ত সারাংশ, হিসাব ও সুপারিশ দিন। Excel-এর প্রতিটি শিট আলাদা করে দেখুন।
 - PDF ও ছবি read_file দিয়ে সরাসরি দেখতে পারবেন — রসিদ, ইনভয়েস, বিজ্ঞাপনের ব্যানার, স্ক্রিনশট ইত্যাদির লেখা পড়ে ও বিষয়বস্তু বুঝে উত্তর দিন। ছবিতে যা স্পষ্ট নয়, তা অনুমান না করে জানিয়ে দিন।
+F-Droid (ফ্রি ও ওপেন-সোর্স অ্যান্ড্রয়েড অ্যাপ রিপোজিটরি) সংযুক্ত আছে — fdroid_* টুলগুলো দিয়ে:
+- গ্রাহকের চাহিদা অনুযায়ী অ্যাপ খুঁজে তুলনা করুন (লাইসেন্স, Android ভার্সন সাপোর্ট, পারমিশন, anti-features, শেষ হালনাগাদ)। anti-features (যেমন Ads, Tracking, NonFreeNet) থাকলে স্পষ্ট জানান।
+- fdroid_download_apk দিয়ে APK যাচাই করে দোকানের FTP-তে রাখুন। ফোল্ডার না বললে /apps/<ক্যাটাগরি> ব্যবহার করুন।
+- প্রোগ্রামিং/ডেভেলপমেন্টের কাজে fdroid_source_code ও fdroid_build_recipe দিয়ে বাস্তব ওপেন-সোর্স অ্যাপের কোড ও বিল্ড পদ্ধতি দেখে রেফারেন্স নিন। অন্যের কোড ব্যবহার করলে তার লাইসেন্স (GPL ইত্যাদি) মেনে চলার কথা মনে করিয়ে দিন।
 - কোনো টুল ব্যর্থ হলে কারণ বুঝে বিকল্প চেষ্টা করুন; না পারলে স্পষ্ট করে জানান।
 - ব্যবহারকারী যে ভাষায় লেখেন (সাধারণত বাংলা), সেই ভাষায় সংক্ষেপে উত্তর দিন এবং শেষে কী কী করেছেন তা তালিকা করে দিন।`;
 
@@ -54,10 +60,38 @@ const TOOLS = [
     path: { type: "string" },
     is_directory: { type: "boolean" },
   }, ["path", "is_directory"]),
+
+  // ---------- F-Droid ----------
+  tool("fdroid_search", "F-Droid-এর প্রায় ৫,০০০ ফ্রি ও ওপেন-সোর্স অ্যান্ড্রয়েড অ্যাপের মধ্যে নাম, বিবরণ, প্যাকেজ নাম বা ক্যাটাগরি দিয়ে খোঁজে। ইংরেজি শব্দে খুঁজলে ভালো ফল পাবেন।", {
+    query: { type: "string", description: "খোঁজার শব্দ (ইংরেজি ভালো), সব চাইলে খালি" },
+    category: { type: "string", description: "নির্দিষ্ট ক্যাটাগরির নাম (fdroid_categories থেকে), না চাইলে খালি" },
+    limit: { type: "integer", description: "কয়টি ফল (১-৫০)" },
+  }, ["query", "category", "limit"]),
+  tool("fdroid_latest_apps", "F-Droid-এ সম্প্রতি যোগ হওয়া (added) বা হালনাগাদ হওয়া (updated) অ্যাপের তালিকা।", {
+    kind: { type: "string", enum: ["added", "updated"] },
+    category: { type: "string", description: "ক্যাটাগরি, না চাইলে খালি" },
+    limit: { type: "integer", description: "কয়টি (১-৫০)" },
+  }, ["kind", "category", "limit"]),
+  tool("fdroid_categories", "F-Droid-এর সব ক্যাটাগরি ও প্রতিটিতে অ্যাপের সংখ্যা।", {}, []),
+  tool("fdroid_app_details", "একটি F-Droid অ্যাপের পূর্ণ বিবরণ: লাইসেন্স, ডেভেলপার, সোর্স কোড লিংক, সর্বশেষ ভার্সনগুলো (Android SDK, পারমিশন, ABI, anti-features, APK লিংক, SHA-256, কী নতুন)।", {
+    package_name: { type: "string", description: "যেমন org.fossify.calendar" },
+  }, ["package_name"]),
+  tool("fdroid_build_recipe", "F-Droid কীভাবে অ্যাপটি সোর্স থেকে বিল্ড করে তার রেসিপি (fdroiddata মেটাডেটা YAML): রিপো, ব্রাঞ্চ/কমিট, gradle flavor, prebuild ধাপ ইত্যাদি। প্রোগ্রামিং/ডেভেলপমেন্টে রেফারেন্স হিসেবে কাজে লাগে।", {
+    package_name: { type: "string" },
+  }, ["package_name"]),
+  tool("fdroid_source_code", "অ্যাপের ওপেন-সোর্স কোড ব্রাউজ করে (GitHub/GitLab/Codeberg, ডিফল্ট ব্রাঞ্চ)। path ফোল্ডার হলে ফাইলের তালিকা, ফাইল হলে কোড দেখায়। রুটের জন্য খালি স্ট্রিং।", {
+    package_name: { type: "string" },
+    path: { type: "string", description: "যেমন \"\" বা \"app/build.gradle\" বা \"app/src/main\"" },
+  }, ["package_name", "path"]),
+  tool("fdroid_download_apk", "F-Droid থেকে একটি অ্যাপের APK নামিয়ে SHA-256 যাচাই করে FTP সার্ভারের ফোল্ডারে রাখে (দোকানের গ্রাহকদের জন্য)।", {
+    package_name: { type: "string" },
+    version_code: { type: "integer", description: "নির্দিষ্ট versionCode, অথবা সর্বশেষ স্থিতিশীল ভার্সনের জন্য 0" },
+    dest_dir: { type: "string", description: "FTP-র কোন ফোল্ডারে রাখবে, যেমন /apps" },
+  }, ["package_name", "version_code", "dest_dir"]),
 ];
 
 /** যেসব টুল সার্ভারে কিছু বদলায় — অটো-মোড বন্ধ থাকলে এগুলোর জন্য অনুমোদন লাগে। */
-export const DESTRUCTIVE = new Set(["write_file", "rename_path", "delete_path"]);
+export const DESTRUCTIVE = new Set(["write_file", "rename_path", "delete_path", "fdroid_download_apk"]);
 
 async function runTool(name, input) {
   switch (name) {
@@ -121,6 +155,33 @@ async function runTool(name, input) {
       if (target === safePath("/")) throw new Error("রুট ফোল্ডার মোছা যাবে না");
       await withConn((c) => c.remove(target, input.is_directory));
       return `মুছে ফেলা হয়েছে: ${input.path}`;
+    }
+    case "fdroid_search":
+      return JSON.stringify(await fdroid.search(input));
+    case "fdroid_latest_apps":
+      return JSON.stringify(await fdroid.latest(input));
+    case "fdroid_categories":
+      return JSON.stringify(await fdroid.categories());
+    case "fdroid_app_details":
+      return JSON.stringify(await fdroid.details(input.package_name));
+    case "fdroid_build_recipe":
+      return fdroid.buildRecipe(input.package_name);
+    case "fdroid_source_code": {
+      const r = await fdroid.sourceCode(input.package_name, input.path);
+      return typeof r === "string" ? r : JSON.stringify(r);
+    }
+    case "fdroid_download_apk": {
+      const apk = await fdroid.downloadApk(input.package_name, input.version_code);
+      try {
+        const target = safePath(path.join(input.dest_dir || "/", apk.fileName));
+        await withConn(async (c) => {
+          await c.mkdir(path.dirname(target));
+          await c.putFile(target, apk.tmpFile);
+        });
+        return `${apk.name} ${apk.version} → ${target} (${(apk.size / 1048576).toFixed(2)} MB, SHA-256 যাচাই সফল: ${apk.sha256})`;
+      } finally {
+        await fs.rm(apk.tmpFile, { force: true });
+      }
     }
     default:
       throw new Error(`অজানা টুল: ${name}`);

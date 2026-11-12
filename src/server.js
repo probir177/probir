@@ -10,6 +10,7 @@ import { fileURLToPath } from "node:url";
 import Anthropic from "@anthropic-ai/sdk";
 import { chat, resolvePending } from "./agent.js";
 import { withConn, safePath, currentProtocol } from "./ftp.js";
+import * as fdroid from "./fdroid.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const { ADMIN_PASSWORD, SESSION_SECRET, PORT = 3000 } = process.env;
@@ -143,4 +144,17 @@ app.post("/api/upload", auth, csrf, upload.array("files"), async (req, res) => {
   }
 });
 
-app.listen(PORT, () => console.log(`এআই অ্যাসিস্ট্যান্ট চালু: http://localhost:${PORT}`));
+app.get("/api/fdroid/status", auth, async (_req, res) => {
+  try {
+    const c = await fdroid.categories();
+    res.json({ ok: true, apps: c.total_apps, index_date: c.index_date });
+  } catch (e) {
+    fail(res, e);
+  }
+});
+
+app.listen(PORT, () => {
+  console.log(`এআই অ্যাসিস্ট্যান্ট চালু: http://localhost:${PORT}`);
+  // F-Droid ইনডেক্স আগেভাগে পেছনে তৈরি করে রাখা, যাতে প্রথম প্রশ্নে দেরি না হয়
+  if (fdroid.enabled()) fdroid.ensureIndex().catch((e) => console.error("[fdroid]", e.message));
+});
