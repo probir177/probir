@@ -26,6 +26,11 @@ main { flex:1; display:flex; min-height:0; }
 #fileList .size { color:var(--muted); font-size:.8rem; white-space:nowrap; }
 .upload { margin:8px; text-align:center; border:1px dashed var(--border); border-radius:8px; padding:10px; cursor:pointer; color:var(--muted); }
 .upload input { display:none; }
+.lib { margin:0 8px 8px; border:1px solid var(--border); border-radius:8px; padding:8px 10px; font-size:.85rem; }
+.libHead { display:flex; justify-content:space-between; align-items:center; }
+.libInfo { color:var(--muted); margin:4px 0 6px; line-height:1.5; }
+.libBtns { display:flex; gap:6px; flex-wrap:wrap; }
+button.small { padding:4px 8px; font-size:.8rem; }
 #chat { flex:1; display:flex; flex-direction:column; min-width:0; }
 #messages { flex:1; overflow:auto; padding:16px; display:flex; flex-direction:column; gap:12px; }
 .msg { max-width:80%; padding:10px 14px; border-radius:12px; white-space:pre-wrap; word-wrap:break-word; line-height:1.55; }

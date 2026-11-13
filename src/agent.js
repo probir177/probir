@@ -4,6 +4,7 @@ import path from "node:path/posix";
 import { withConn, safePath, currentProtocol } from "./ftp.js";
 import { fileKind, MAX_BYTES, toToolContent } from "./readers.js";
 import * as fdroid from "./fdroid.js";
+import * as library from "./library.js";
 import fs from "node:fs/promises";
 
 const client = new Anthropic();
@@ -21,6 +22,7 @@ const SYSTEM = `আপনি একজন দক্ষ এআই অ্যাস
 F-Droid (ফ্রি ও ওপেন-সোর্স অ্যান্ড্রয়েড অ্যাপ রিপোজিটরি) সংযুক্ত আছে — fdroid_* টুলগুলো দিয়ে:
 - গ্রাহকের চাহিদা অনুযায়ী অ্যাপ খুঁজে তুলনা করুন (লাইসেন্স, Android ভার্সন সাপোর্ট, পারমিশন, anti-features, শেষ হালনাগাদ)। anti-features (যেমন Ads, Tracking, NonFreeNet) থাকলে স্পষ্ট জানান।
 - fdroid_download_apk দিয়ে APK যাচাই করে দোকানের FTP-তে রাখুন। ফোল্ডার না বললে /apps/<ক্যাটাগরি> ব্যবহার করুন।
+- দোকানের অ্যাপ লাইব্রেরি (/apps) দেখতে library_status, হালনাগাদ করতে library_update (বড় পরিবর্তনের আগে dry_run=true দিয়ে তালিকা দেখিয়ে নিন), গ্রাহকদের তালিকা বানাতে library_build_catalog, আগের আপডেটের লগ দেখতে library_history ব্যবহার করুন।
 - প্রোগ্রামিং/ডেভেলপমেন্টের কাজে fdroid_source_code ও fdroid_build_recipe দিয়ে বাস্তব ওপেন-সোর্স অ্যাপের কোড ও বিল্ড পদ্ধতি দেখে রেফারেন্স নিন। অন্যের কোড ব্যবহার করলে তার লাইসেন্স (GPL ইত্যাদি) মেনে চলার কথা মনে করিয়ে দিন।
 - কোনো টুল ব্যর্থ হলে কারণ বুঝে বিকল্প চেষ্টা করুন; না পারলে স্পষ্ট করে জানান।
 - ব্যবহারকারী যে ভাষায় লেখেন (সাধারণত বাংলা), সেই ভাষায় সংক্ষেপে উত্তর দিন এবং শেষে কী কী করেছেন তা তালিকা করে দিন।`;
@@ -88,10 +90,23 @@ const TOOLS = [
     version_code: { type: "integer", description: "নির্দিষ্ট versionCode, অথবা সর্বশেষ স্থিতিশীল ভার্সনের জন্য 0" },
     dest_dir: { type: "string", description: "FTP-র কোন ফোল্ডারে রাখবে, যেমন /apps" },
   }, ["package_name", "version_code", "dest_dir"]),
+
+  // ---------- দোকানের অ্যাপ লাইব্রেরি ----------
+  tool("library_status", "FTP-র অ্যাপ লাইব্রেরি (ডিফল্ট /apps) স্ক্যান করে প্রতিটি APK-কে F-Droid-এর সাথে মেলায়: কোনটার নতুন ভার্সন এসেছে, কোনগুলো চেনা যায়নি, কোনটা কোন Android-এ চলে। শুধু পড়ে, কিছু বদলায় না।", {
+    dir: { type: "string", description: "লাইব্রেরি ফোল্ডার; ডিফল্টের জন্য খালি" },
+  }, ["dir"]),
+  tool("library_update", "লাইব্রেরির পুরোনো APK-গুলো F-Droid-এর সর্বশেষ স্থিতিশীল ভার্সনে হালনাগাদ করে (যাচাই করে), পুরোনোটি _old ফোল্ডারে সরায় এবং ক্যাটালগ নতুন করে বানায়। dry_run=true দিলে শুধু কী হবে তা দেখায়।", {
+    packages: { type: "array", items: { type: "string" }, description: "নির্দিষ্ট package_name-গুলো; সবগুলোর জন্য খালি তালিকা" },
+    dry_run: { type: "boolean" },
+  }, ["packages", "dry_run"]),
+  tool("library_build_catalog", "লাইব্রেরির সব অ্যাপ নিয়ে গ্রাহকদের জন্য catalog.html (খোঁজার সুবিধাসহ, বাংলা) ও catalog.json বানিয়ে লাইব্রেরি ফোল্ডারে রাখে।", {}, []),
+  tool("library_history", "সাম্প্রতিক লাইব্রেরি আপডেটগুলোর লগ (স্বয়ংক্রিয় ও হাতে চালানো) এবং রাতের স্বয়ংক্রিয় আপডেটের সেটিং।", {}, []),
 ];
 
 /** যেসব টুল সার্ভারে কিছু বদলায় — অটো-মোড বন্ধ থাকলে এগুলোর জন্য অনুমোদন লাগে। */
-export const DESTRUCTIVE = new Set(["write_file", "rename_path", "delete_path", "fdroid_download_apk"]);
+export const DESTRUCTIVE = new Set(["write_file", "rename_path", "delete_path", "fdroid_download_apk", "library_update", "library_build_catalog"]);
+/** dry_run-এর মতো যে ডাকগুলো আসলে কিছু বদলায় না, সেগুলোতে অনুমোদন লাগবে না */
+const isDestructive = (t) => DESTRUCTIVE.has(t.name) && !(t.name === "library_update" && t.input?.dry_run === true);
 
 async function runTool(name, input) {
   switch (name) {
@@ -183,6 +198,14 @@ async function runTool(name, input) {
         await fs.rm(apk.tmpFile, { force: true });
       }
     }
+    case "library_status":
+      return JSON.stringify(await library.scan(input.dir || undefined));
+    case "library_update":
+      return JSON.stringify(await library.update({ packages: input.packages || [], dryRun: input.dry_run === true }));
+    case "library_build_catalog":
+      return JSON.stringify(await library.buildCatalog());
+    case "library_history":
+      return JSON.stringify({ auto_update: library.scheduleConfig(), runs: await library.history(10) });
     default:
       throw new Error(`অজানা টুল: ${name}`);
   }
@@ -238,9 +261,9 @@ async function loop(state, actions) {
       continue;
     }
 
-    const needsApproval = !state.autoApprove && toolUses.some((t) => DESTRUCTIVE.has(t.name));
+    const needsApproval = !state.autoApprove && toolUses.some(isDestructive);
     if (needsApproval) {
-      state.pending = toolUses.map((t) => ({ id: t.id, name: t.name, input: t.input, destructive: DESTRUCTIVE.has(t.name) }));
+      state.pending = toolUses.map((t) => ({ id: t.id, name: t.name, input: t.input, destructive: isDestructive(t) }));
       return { reply: text, actions, pending: state.pending };
     }
 

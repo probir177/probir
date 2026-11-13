@@ -21,6 +21,7 @@ async function showApp(me) {
   $("proto").textContent = me.protocol;
   if (me.pending) renderApproval(me.pending);
   loadFiles();
+  loadLibrary();
 }
 
 $("loginForm").onsubmit = async (e) => {
@@ -62,7 +63,7 @@ function busy(on) { $("send").disabled = on; $("send").textContent = on ? "ক�
 function handleResult(r) {
   if (r.reply || r.actions?.length) addMsg(r.reply || "(কাজ চলছে)", "bot", r.actions);
   if (r.pending) renderApproval(r.pending); else $("approval").classList.add("hidden");
-  if (r.actions?.some((a) => a.ok && ["write_file", "rename_path", "delete_path", "create_directory"].includes(a.tool))) loadFiles();
+  if (r.actions?.some((a) => a.ok && ["write_file", "rename_path", "delete_path", "create_directory", "fdroid_download_apk", "library_update", "library_build_catalog"].includes(a.tool))) { loadFiles(); loadLibrary(); }
 }
 
 $("chatForm").onsubmit = async (e) => {
@@ -78,8 +79,10 @@ $("chatForm").onsubmit = async (e) => {
 };
 $("input").onkeydown = (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("chatForm").requestSubmit(); } };
 
-const LABEL = { write_file: "ফাইল লেখা", rename_path: "নাম বদল/সরানো", delete_path: "মুছে ফেলা", fdroid_download_apk: "F-Droid থেকে APK এনে FTP-তে রাখা" };
+const LABEL = { write_file: "ফাইল লেখা", rename_path: "নাম বদল/সরানো", delete_path: "মুছে ফেলা", fdroid_download_apk: "F-Droid থেকে APK এনে FTP-তে রাখা", library_update: "লাইব্রেরির অ্যাপ হালনাগাদ", library_build_catalog: "গ্রাহকদের ক্যাটালগ বানানো" };
 const describe = (i) =>
+  Array.isArray(i.packages) ? (i.packages.length ? i.packages.join(", ") : "নতুন ভার্সন থাকা সব অ্যাপ") :
+  !Object.keys(i).length ? "লাইব্রেরি ফোল্ডারে catalog.html ও catalog.json" :
   i.package_name ? `${i.package_name} (${i.version_code ? "ভার্সন " + i.version_code : "সর্বশেষ"}) → ${i.dest_dir}` : i.path || `${i.from} → ${i.to}`;
 function renderApproval(pending) {
   const box = $("approval");
@@ -160,5 +163,22 @@ $("uploadInput").onchange = async (e) => {
   catch (err) { alert(err.message); }
   e.target.value = "";
 };
+
+// ---------- অ্যাপ লাইব্রেরি ----------
+async function loadLibrary() {
+  const info = $("libInfo");
+  info.textContent = "দেখা হচ্ছে…";
+  try {
+    const s = await api("/api/library/status");
+    const auto = s.auto_update.enabled ? `স্বয়ংক্রিয় আপডেট: প্রতিদিন ${s.auto_update.time}` : "স্বয়ংক্রিয় আপডেট: বন্ধ";
+    const last = s.last_run ? `শেষ আপডেট: ${s.last_run.started.slice(0, 16).replace("T", " ")} (${s.last_run.updated.length}টি হালনাগাদ)` : "এখনো কোনো আপডেট চালানো হয়নি";
+    info.textContent = `${s.library_dir} · ${s.apps}টি অ্যাপ · ${s.updates_available}টির নতুন ভার্সন আছে${s.unrecognized ? ` · ${s.unrecognized}টি চেনা যায়নি` : ""}\n${auto}\n${last}`;
+    info.style.whiteSpace = "pre-line";
+  } catch (err) { info.textContent = err.message; }
+}
+const ask = (text) => { $("input").value = text; $("chatForm").requestSubmit(); };
+$("libRefresh").onclick = loadLibrary;
+$("libCheck").onclick = () => ask("অ্যাপ লাইব্রেরিতে কোন কোন অ্যাপের নতুন ভার্সন এসেছে দেখাও, এবং আপডেট করলে কী হবে তা dry run দিয়ে দেখাও।");
+$("libCatalog").onclick = () => ask("লাইব্রেরির সব অ্যাপ নিয়ে গ্রাহকদের জন্য ক্যাটালগ বানাও।");
 
 api("/api/me").then((me) => (me.loggedIn ? showApp(me) : showLogin())).catch(showLogin);

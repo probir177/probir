@@ -382,3 +382,21 @@ export async function downloadApk(id, versionCode) {
     throw e;
   }
 }
+
+/** লাইব্রেরি/ক্যাটালগের জন্য: ইনডেক্সে থাকা অ্যাপের সংক্ষিপ্ত তথ্য ও সর্বশেষ স্থিতিশীল ভার্সন (না থাকলে null) */
+export async function appInfo(id) {
+  await ensureIndex();
+  const a = byId.get(id);
+  if (!a) return null;
+  const v = latestStable(a);
+  return {
+    id: a.id,
+    name: a.name,
+    summary: a.summary,
+    categories: a.categories,
+    license: a.license,
+    icon: a.icon,
+    sourceCode: a.sourceCode,
+    latest: v ? { code: v.code, name: v.name, size: v.size, minSdk: v.minSdk, antiFeatures: v.antiFeatures, added: v.added } : null,
+  };
+}

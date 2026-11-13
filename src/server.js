@@ -11,6 +11,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { chat, resolvePending } from "./agent.js";
 import { withConn, safePath, currentProtocol } from "./ftp.js";
 import * as fdroid from "./fdroid.js";
+import * as library from "./library.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const { ADMIN_PASSWORD, SESSION_SECRET, PORT = 3000 } = process.env;
@@ -153,8 +154,19 @@ app.get("/api/fdroid/status", auth, async (_req, res) => {
   }
 });
 
+// দোকানের অ্যাপ লাইব্রেরি
+app.get("/api/library/status", auth, async (_req, res) => {
+  try {
+    const s = await library.scan();
+    res.json({ library_dir: s.library_dir, apps: s.apps.length, updates_available: s.updates_available, unrecognized: s.unrecognized.length, auto_update: library.scheduleConfig(), last_run: (await library.history(1))[0] || null });
+  } catch (e) {
+    fail(res, e);
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`এআই অ্যাসিস্ট্যান্ট চালু: http://localhost:${PORT}`);
   // F-Droid ইনডেক্স আগেভাগে পেছনে তৈরি করে রাখা, যাতে প্রথম প্রশ্নে দেরি না হয়
   if (fdroid.enabled()) fdroid.ensureIndex().catch((e) => console.error("[fdroid]", e.message));
+  if (fdroid.enabled()) library.startScheduler();
 });
