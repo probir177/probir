@@ -8,7 +8,7 @@ import { withConn, safePath } from "./ftp.js";
 import * as fdroid from "./fdroid.js";
 
 const P = path.posix;
-const ROOT = () => process.env.LIBRARY_DIR || "/apps";
+const ROOT = () => (process.env.LIBRARY_DIR || "").trim() || "/apps";
 const OLD = "_old";
 const KEEP_OLD = () => Math.max(0, Number(process.env.LIBRARY_KEEP_OLD ?? 2));
 const STATE_FILE = () => path.join(path.resolve(process.env.DATA_DIR || "data"), "library-state.json");
@@ -243,7 +243,7 @@ q.oninput=f;cat.onchange=f;
 }
 
 /** লাইব্রেরি থেকে গ্রাহকদের জন্য catalog.json ও catalog.html বানিয়ে লাইব্রেরি ফোল্ডারে রাখে */
-export async function buildCatalog({ dir = ROOT(), title = process.env.STORE_NAME ? `${process.env.STORE_NAME} — অ্যাপ ক্যাটালগ` : "অ্যাপ ক্যাটালগ" } = {}) {
+export async function buildCatalog({ dir = ROOT(), title = (process.env.STORE_NAME || "").trim() ? `${process.env.STORE_NAME.trim()} — অ্যাপ ক্যাটালগ` : "অ্যাপ ক্যাটালগ" } = {}) {
   const status = await scan(dir);
   const root = status.library_dir;
   const generated = new Date().toISOString();
@@ -303,21 +303,42 @@ export async function history(limit = 10) {
 }
 
 // ---------- স্বয়ংক্রিয় রাতের আপডেট ----------
-export const scheduleConfig = () => ({
-  enabled: process.env.AUTO_UPDATE === "true",
-  time: /^\d{2}:\d{2}$/.test(process.env.AUTO_UPDATE_TIME || "") ? process.env.AUTO_UPDATE_TIME : "03:00",
-});
+const validZone = (z) => {
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: z });
+    return true;
+  } catch {
+    return false;
+  }
+};
+export const scheduleConfig = () => {
+  // AUTO_UPDATE_TZ > TZ > সার্ভারের নিজের টাইমজোন। হোস্টিং আগে থেকে TZ সেট করে রাখলেও AUTO_UPDATE_TZ সেটি মানে।
+  const zone = [process.env.AUTO_UPDATE_TZ, process.env.TZ].map((z) => (z || "").trim()).find((z) => z && validZone(z)) || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  return {
+    enabled: (process.env.AUTO_UPDATE || "").trim() === "true",
+    time: /^\d{2}:\d{2}$/.test((process.env.AUTO_UPDATE_TIME || "").trim()) ? process.env.AUTO_UPDATE_TIME.trim() : "03:00",
+    zone,
+  };
+};
+
+/** নির্দিষ্ট টাইমজোনে এখনকার তারিখ (YYYY-MM-DD) ও সময় (HH:MM) */
+function nowIn(zone) {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-CA", { timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" })
+      .formatToParts(new Date())
+      .map((p) => [p.type, p.value]),
+  );
+  return { date: `${parts.year}-${parts.month}-${parts.day}`, hhmm: `${parts.hour}:${parts.minute}` };
+}
 
 /** প্রতি মিনিটে সময় দেখে, দিনে একবার নির্ধারিত সময়ে আপডেট চালায় (সার্ভারের TZ অনুযায়ী) */
 export function startScheduler() {
-  const { enabled, time } = scheduleConfig();
+  const { enabled, time, zone } = scheduleConfig();
   if (!enabled) return null;
-  console.log(`[library] স্বয়ংক্রিয় আপডেট চালু: প্রতিদিন ${time}`);
+  console.log(`[library] স্বয়ংক্রিয় আপডেট চালু: প্রতিদিন ${time} (${zone})`);
   const tick = async () => {
-    const now = new Date();
-    const hhmm = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+    const { date: today, hhmm } = nowIn(zone);
     if (hhmm < time || running) return;
-    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
     const state = await readState();
     if (state.lastScheduledDate === today) return;
     // দুবার না চলার জন্য আগেই তারিখ লিখে রাখা

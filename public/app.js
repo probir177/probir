@@ -170,7 +170,7 @@ async function loadLibrary() {
   info.textContent = "দেখা হচ্ছে…";
   try {
     const s = await api("/api/library/status");
-    const auto = s.auto_update.enabled ? `স্বয়ংক্রিয় আপডেট: প্রতিদিন ${s.auto_update.time}` : "স্বয়ংক্রিয় আপডেট: বন্ধ";
+    const auto = s.auto_update.enabled ? `স্বয়ংক্রিয় আপডেট: প্রতিদিন ${s.auto_update.time} (${s.auto_update.zone})` : "স্বয়ংক্রিয় আপডেট: বন্ধ";
     const last = s.last_run ? `শেষ আপডেট: ${s.last_run.started.slice(0, 16).replace("T", " ")} (${s.last_run.updated.length}টি হালনাগাদ)` : "এখনো কোনো আপডেট চালানো হয়নি";
     info.textContent = `${s.library_dir} · ${s.apps}টি অ্যাপ · ${s.updates_available}টির নতুন ভার্সন আছে${s.unrecognized ? ` · ${s.unrecognized}টি চেনা যায়নি` : ""}\n${auto}\n${last}`;
     info.style.whiteSpace = "pre-line";
